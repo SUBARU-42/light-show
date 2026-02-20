@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pink Particle Universe - Fixed Heart</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', sans-serif; }
+        #status { 
+            position: absolute; top: 30px; left: 50%; transform: translateX(-50%);
+            color: #ff69b4; font-size: 2.2rem; text-transform: uppercase; 
+            letter-spacing: 6px; text-shadow: 0 0 20px #ff69b4; font-weight: bold;
+            pointer-events: none; z-index: 100;
+        }
+        #video-container { 
+            position: absolute; bottom: 20px; left: 20px; width: 180px; height: 135px; 
+            border: 2px solid #ff69b4; border-radius: 10px; overflow: hidden; 
+            transform: scaleX(-1); opacity: 0.3;
+        }
+        video { width: 100%; height: 100%; object-fit: cover; }
+    </style>
+</head>
+<body>
+
+    <div id="status">WAVING AT YOU...</div>
+    <div id="video-container"><video id="input_video"></video></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/three@0.150.1/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+
+    <script>
+        const scene = new THREE.Scene();
+        // Wider FOV (85) helps see larger objects better
+        const camera = new THREE.PerspectiveCamera(85, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        const particleCount = 25000; 
+        const geo = new THREE.BufferGeometry();
+        const posArray = new Float32Array(particleCount * 3);
+        const targetArray = new Float32Array(particleCount * 3);
+        const colors = new Float32Array(particleCount * 3);
+
+        for(let i=0; i < particleCount; i++) {
+            colors[i*3] = 1.0; colors[i*3+1] = 0.15; colors[i*3+2] = 0.55; 
+        }
+
+        geo.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+        geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+        const mat = new THREE.PointsMaterial({
+            size: 0.045,
+            vertexColors: true,
+            transparent: true,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false
+        });
+
+        const points = new THREE.Points(geo, mat);
+        scene.add(points);
+        camera.position.z = 12;
+
+        function setShape(type) {
+            document.getElementById('status').innerText = type;
+            const size = 8.0; 
+
+            for (let i = 0; i < particleCount; i++) {
+                let x, y, z;
+                const i3 = i * 3;
+
+                if (type === 'heart') {
+                    const t = Math.random() * Math.PI * 2;
+                    // Significantly reduced multiplier to 0.12 (was 0.4 then 0.18)
+                    x = size * 0.12 * (16 * Math.pow(Math.sin(t), 3));
+                    y = size * 0.12 * (13 * Math.cos(t) - 5 * Math.cos(2*t) - 2 * Math.cos(3*t) - Math.cos(4*t));
+                    z = (Math.random() - 0.5) * 1.5;
+                } else if (type === 'saturn') {
+                    if (i < particleCount * 0.4) { 
+                        const phi = Math.acos(-1 + (2 * i) / (particleCount * 0.4));
+                        const theta = Math.sqrt(particleCount * 0.4 * Math.PI) * phi;
+                        x = Math.cos(theta) * Math.sin(phi) * (size * 0.45);
+                        y = Math.sin(theta) * Math.sin(phi) * (size * 0.45);
+                        z = Math.cos(phi) * (size * 0.45);
+                    } else { 
+                        const angle = Math.random() * Math.PI * 2;
+                        const r = (size * 0.65) + Math.random() * (size * 0.25);
+                        x = Math.cos(angle) * r;
+                        y = (Math.random() - 0.5) * 0.4;
+                        z = Math.sin(angle) * r;
+                    }
+                } else if (type === 'flower') {
+                    const t = Math.random() * Math.PI * 2;
+                    const r = (size * 0.6) * Math.sin(5 * t);
+                    x = r * Math.cos(t);
+                    y = r * Math.sin(t);
+                    z = (Math.random() - 0.5) * 1.5;
+                } else if (type === 'fireworks') {
+                    const r = Math.random() * (size * 1.1);
+                    const theta = Math.random() * Math.PI * 2;
+                    const phi = Math.random() * Math.PI;
+                    x = r * Math.sin(phi) * Math.cos(theta);
+                    y = r * Math.sin(phi) * Math.sin(theta);
+                    z = r * Math.cos(phi);
+                } else { // Sphere
+                    const u = Math.random(); const v = Math.random();
+                    const theta = 2 * Math.PI * u;
+                    const phi = Math.acos(2 * v - 1);
+                    x = (size * 0.55) * Math.sin(phi) * Math.cos(theta);
+                    y = (size * 0.55) * Math.sin(phi) * Math.sin(theta);
+                    z = (size * 0.55) * Math.cos(phi);
+                }
+                targetArray[i3] = x; targetArray[i3+1] = y; targetArray[i3+2] = z;
+            }
+        }
+
+        setShape('sphere');
+
+        function detectGesture(landmarks) {
+            const getDist = (a, b) => Math.hypot(landmarks[a].x - landmarks[b].x, landmarks[a].y - landmarks[b].y);
+            const thumbIdxDist = getDist(4, 8);
+            const isFist = getDist(8, 0) < 0.22 && getDist(12, 0) < 0.22;
+            const indexUp = landmarks[8].y < landmarks[6].y;
+            const middleUp = landmarks[12].y < landmarks[10].y;
+            const ringUp = landmarks[16].y < landmarks[14].y;
+            const pinkyUp = landmarks[20].y < landmarks[18].y;
+            const fingersUp = [indexUp, middleUp, ringUp, pinkyUp].filter(v => v).length;
+
+            if (isFist) return 'fireworks';
+            if (thumbIdxDist < 0.05) return 'heart';
+            if (fingersUp === 2 && indexUp && middleUp) return 'saturn';
+            if (fingersUp === 4) return 'flower';
+            if (fingersUp >= 3) return 'sphere';
+            return null;
+        }
+
+        const videoElement = document.getElementById('input_video');
+        const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
+        hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.6 });
+
+        let currentGesture = "sphere";
+        let targetRotX = 0, targetRotY = 0;
+
+        hands.onResults((results) => {
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                const landmarks = results.multiHandLandmarks[0];
+                const gesture = detectGesture(landmarks);
+                if (gesture && gesture !== currentGesture) {
+                    currentGesture = gesture;
+                    setShape(gesture);
+                }
+                const palm = landmarks[9];
+                points.position.x += ((palm.x - 0.5) * -24 - points.position.x) * 0.15;
+                points.position.y += ((palm.y - 0.5) * -18 - points.position.y) * 0.15;
+                targetRotY = (palm.x - 0.5) * 3; 
+                targetRotX = (palm.y - 0.5) * 3;
+            }
+        });
+
+        const cameraFeed = new Camera(videoElement, {
+            onFrame: async () => { await hands.send({image: videoElement}); },
+            width: 640, height: 480
+        });
+        cameraFeed.start();
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const pos = geo.attributes.position.array;
+            for (let i = 0; i < particleCount * 3; i++) {
+                pos[i] += (targetArray[i] - pos[i]) * 0.08;
+            }
+            points.rotation.y += (targetRotY - points.rotation.y) * 0.1;
+            points.rotation.x += (targetRotX - points.rotation.x) * 0.1;
+            geo.attributes.position.needsUpdate = true;
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        animate();
+    </script>
+</body>
+</html>
